@@ -1,16 +1,8 @@
-//
-// Copyright (c) Microsoft. All rights reserved.
-// This code is licensed under the MIT License (MIT).
-// THIS CODE IS PROVIDED *AS IS* WITHOUT WARRANTY OF
-// ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING ANY
-// IMPLIED WARRANTIES OF FITNESS FOR A PARTICULAR
-// PURPOSE, MERCHANTABILITY, OR NON-INFRINGEMENT.
-//
-// Developed by Minigraph
-//
-// Author:  James Stanard 
-//          Julia Careaga
-//
+///
+///
+/// THIS SHADER IS BROKEN AND UNUSED, HOLDOVER FROM EARLY DEVELOPMENT
+///
+///
 
 #include "FluidUpdateCommon.hlsli"
 #include "FluidUtility.hlsli"
@@ -47,13 +39,9 @@ void main( uint3 DTid : SV_DispatchThreadID )
 
     ParticleMotion ParticleState = g_InputBuffer[ DTid.x ];
     ParticleSpawnData rd = g_ResetData[ ParticleState.ResetDataIndex ];
-
-    //// Update age.  If normalized age exceeds 1, the particle does not renew its lease on life.
+    
     ParticleState.Age += gElapsedTime * rd.AgeRate;
-    //if (ParticleState.Age >= 1.0)
-    //    return;
-    
-    
+
     ///-------------------------------------
     ///
     ///Need to run seperate Compute shaders for each stage of simulation
@@ -127,10 +115,6 @@ void main( uint3 DTid : SV_DispatchThreadID )
 
     }
     ParticleState.Velocity += totalInfluenceForce * StepSize;
-    //ParticleState.Velocity += float3(0.f, -9.8f, 0.f) * 10 * StepSize; // Gravity * StepSize * ParticleState.Mass;
-    
-    
-    //ParticleState.Velocity += ParticleState.Velocity * -0.1 * StepSize;
     
     // The spawn dispatch will be simultaneously adding particles as well.  It's possible to overflow.
     uint index = g_OutputBuffer.IncrementCounter();    
@@ -149,12 +133,8 @@ void main( uint3 DTid : SV_DispatchThreadID )
     Sprite.TextureID = TextureID;
 
     // Update size and color
-    Sprite.Size = 10.f; //lerp(rd.StartSize, rd.EndSize, ParticleState.Age);
-    Sprite.Color = float4(1.f, 1.f, 1.f, 1.f); //lerp(rd.StartColor, rd.EndColor, ParticleState.Age);
-
-    //// ...Originally from Reflex...
-    //// Use a trinomial to smoothly fade in a particle at birth and fade it out at death.
-    //Sprite.Color *= ParticleState.Age * (1.0 - ParticleState.Age) * (1.0 - ParticleState.Age) * 6.7;
+    Sprite.Size = 10.f;
+    Sprite.Color = float4(1.f, 1.f, 1.f, 1.f); 
 
     g_VertexBuffer[ g_VertexBuffer.IncrementCounter() ] = Sprite;
 }

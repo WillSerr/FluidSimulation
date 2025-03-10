@@ -1,17 +1,3 @@
-//
-// Copyright (c) Microsoft. All rights reserved.
-// This code is licensed under the MIT License (MIT).
-// THIS CODE IS PROVIDED *AS IS* WITHOUT WARRANTY OF
-// ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING ANY
-// IMPLIED WARRANTIES OF FITNESS FOR A PARTICULAR
-// PURPOSE, MERCHANTABILITY, OR NON-INFRINGEMENT.
-//
-// Developed by Minigraph
-//
-// Author:  James Stanard 
-//          Julia Careaga
-//
-
 #include "FluidUpdateCommon.hlsli"
 #include "FluidUtility.hlsli"
 
@@ -32,10 +18,10 @@ float calculateInfluence(float3 SelfPos, float3 OtherPos, float InfluenceRadius)
         
     //Repulsion
     float influenceFactor = max(0, InfluenceRadius - deltaLength);
-    influenceFactor = influenceFactor * influenceFactor * influenceFactor;
+    influenceFactor = influenceFactor * influenceFactor * influenceFactor; //curve smoothed towards zero
         
 
-    return influenceFactor / (InfluenceRadius * InfluenceRadius * InfluenceRadius);
+    return influenceFactor / (InfluenceRadius * InfluenceRadius * InfluenceRadius); //Should do max(...) / InfluenceRadius instead
 }
 
 float calculatePressure(float Density)
@@ -46,6 +32,7 @@ float calculatePressure(float Density)
     return densityDelta * PressureMultiplier;
 }
 
+// obtain the pressure between self and other
 float calculateSharedPressure(float DensitySelf, float DensityOther)
 {
     float pressureSelf = calculatePressure(DensitySelf);
@@ -87,7 +74,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
         //Unstick 2 overlapping particles
         if (deltaSqrDistance == 0)
         {
-            totalInfluenceForce += float3(0.f, 0.1f, 0.f) * sign(DTid.x - i) * influenceRadius;
+            totalInfluenceForce += float3(0.f, 0.1f, 0.f) * sign(DTid.x - i) * influenceRadius; //One up, one down
             continue;
         }
         

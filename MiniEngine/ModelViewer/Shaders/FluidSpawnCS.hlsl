@@ -1,17 +1,3 @@
-//
-// Copyright (c) Microsoft. All rights reserved.
-// This code is licensed under the MIT License (MIT).
-// THIS CODE IS PROVIDED *AS IS* WITHOUT WARRANTY OF
-// ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING ANY
-// IMPLIED WARRANTIES OF FITNESS FOR A PARTICULAR
-// PURPOSE, MERCHANTABILITY, OR NON-INFRINGEMENT.
-//
-// Developed by Minigraph
-//
-// Author:  Julia Careaga
-//          James Stanard 
-//
-
 #include "FluidUpdateCommon.hlsli"
 #include "FluidUtility.hlsli"
 
@@ -35,9 +21,11 @@ void main( uint3 DTid : SV_DispatchThreadID )
     
     const float HalfBounds = 100;
     const float BoundsHeight = 100;
+    
+    //40x40x40 cube of particles, Max particles 64k
     float3 adjustedPosition = EmitPosW + float3((index % 40) * 5.f - HalfBounds,
         (int(index / 1600) % 40) * 5.f - HalfBounds + BoundsHeight,
-        (int(index / 40) % 40) * 5.f - HalfBounds); // -emitterVelocity * rd.Random + rd.SpreadOffset;
+        (int(index / 40) % 40) * 5.f - HalfBounds);
 
     ParticleMotion newParticle;
     newParticle.Position = adjustedPosition;    
