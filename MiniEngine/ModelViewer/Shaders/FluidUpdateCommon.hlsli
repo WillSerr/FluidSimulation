@@ -55,6 +55,8 @@ struct ParticleMotion
     float Age;
     float Rotation;
     uint ResetDataIndex;
+    uint LocationHash;
+    uint SortKey;
 };
 
 struct ParticleVertexOutput

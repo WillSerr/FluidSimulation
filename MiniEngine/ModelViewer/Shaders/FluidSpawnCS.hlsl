@@ -19,13 +19,13 @@ void main( uint3 DTid : SV_DispatchThreadID )
     float3 randDir = rd.Velocity.x * EmitRightW + rd.Velocity.y * EmitUpW + rd.Velocity.z * EmitDirW;
     float3 newVelocity = emitterVelocity * EmitterVelocitySensitivity + randDir;
     
-    const float HalfBounds = 100;
-    const float BoundsHeight = 100;
+    
+    const float Capacity = HalfBounds / InfluenceRadius;
     
     //40x40x40 cube of particles, Max particles 64k
-    float3 adjustedPosition = EmitPosW + float3((index % 40) * 5.f - HalfBounds,
-        (int(index / 1600) % 40) * 5.f - HalfBounds + BoundsHeight,
-        (int(index / 40) % 40) * 5.f - HalfBounds);
+    float3 adjustedPosition = EmitPosW + float3((index % Capacity) * InfluenceDiameter - HalfBounds,
+        (int(index / (Capacity * Capacity)) % Capacity) * InfluenceDiameter - HalfBounds + BoundsHeight,
+        (int(index / Capacity) % Capacity) * InfluenceDiameter - HalfBounds);
 
     ParticleMotion newParticle;
     newParticle.Position = adjustedPosition;    
@@ -35,6 +35,9 @@ void main( uint3 DTid : SV_DispatchThreadID )
     newParticle.Mass = 25; 
     newParticle.Density = 0.0f;
     newParticle.Age = 0.0;
-    newParticle.ResetDataIndex = ResetDataIndex; 
+    newParticle.ResetDataIndex = ResetDataIndex;
+    newParticle.LocationHash = BasicPositionHash(newParticle.PredictedPosition, 5);
+    newParticle.SortKey = HashToLookupKey(newParticle.LocationHash);
+    
     g_OutputBuffer[index] = newParticle;
 }

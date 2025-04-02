@@ -8,6 +8,7 @@ cbuffer CB0 : register(b0)
 
 StructuredBuffer<ParticleSpawnData> g_ResetData : register(t0);
 StructuredBuffer<ParticleMotion> g_InputBuffer : register(t1);
+StructuredBuffer<uint> g_SortKeys : register(t2);
 RWStructuredBuffer<ParticleVertex> g_VertexBuffer : register(u0);
 RWStructuredBuffer<ParticleMotion> g_OutputBuffer : register(u2);
 
@@ -36,29 +37,60 @@ void main(uint3 DTid : SV_DispatchThreadID)
     //Update position
     float StepSize = gElapsedTime;
     
-    const float influenceRadius = 5;
+    const float influenceRadius = InfluenceRadius;
     
     //The total force being enacted upon the volume of fluid, basically compression
     float density = 0;
     
-    for (int i = 0; i < MaxParticles; ++i)
+    for (int i = 0; i < 27; ++i)
     {
-        if (i == DTid.x)
-        {
-            continue;
-        }
+        float3 neighbourPos = offsets3D[i] * SimCellSize;
+        uint neighbourHash = BasicPositionHash(ParticleState.Position + neighbourPos, SimCellSize);
+        uint neighbourKey = HashToLookupKey(neighbourHash);
+        int inputBufferIndex = g_SortKeys[neighbourKey];
         
-        float influenceFactor = calculateInfluence(ParticleState.PredictedPosition, g_InputBuffer[i].PredictedPosition, influenceRadius);        
-               
-        density += influenceFactor;
+        while (inputBufferIndex < MaxParticles)
+        {            
+            //Stop when exiting the bucket
+            if (g_InputBuffer[inputBufferIndex].SortKey != neighbourKey)
+            {
+                break;
+            }
+            
+            //Must increment index before skipping to prevent endless loop
+            float influenceFactor = calculateInfluence(ParticleState.PredictedPosition, g_InputBuffer[inputBufferIndex].PredictedPosition, influenceRadius);
+            inputBufferIndex++;
+            
+            //Skip particles from non-neighbour cells in the bucket
+            if (g_InputBuffer[inputBufferIndex-1].LocationHash != neighbourHash)
+            {
+                continue;
+            }
+            //Skip over self
+            if (inputBufferIndex-1 == DTid.x)
+            {
+                continue;
+            }
+            
+            
+            density += influenceFactor;
+        }
     }
+    
+    
+    //for (int i = 0; i < MaxParticles; ++i)
+    //{
+    //    if (i == DTid.x)
+    //    {
+    //        continue;
+    //    }
+        
+    //    float influenceFactor = calculateInfluence(ParticleState.PredictedPosition, g_InputBuffer[i].PredictedPosition, influenceRadius);        
+               
+    //    density += influenceFactor;
+    //}
     ParticleState.Density = max(0.00001, density);
     
-    
-    // The spawn dispatch might be simultaneously adding particles as well.  It's possible to overflow.
-    uint index = g_OutputBuffer.IncrementCounter();
-    if (index >= MaxParticles)
-        return;
 
-    g_OutputBuffer[index] = ParticleState;
+    g_OutputBuffer[DTid.x] = ParticleState;
 }

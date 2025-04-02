@@ -20,11 +20,15 @@ private:
 
     void SpawnFluid(ComputeContext& CompContext);
     void ComputeFluidAdvection(ComputeContext& CompContext);
+    void ComputeFluidLookupMap(ComputeContext& CompContext);
     void ComputeFluidDensity(ComputeContext& CompContext);
     void ComputeFluidVelocity(ComputeContext& CompContext);
 
     StructuredBuffer m_StateBuffers[2];
     uint32_t m_CurrentStateBuffer;
+
+    StructuredBuffer m_LookupMap;
+    StructuredBuffer m_TempIndexArray;
 
     //ParticleSystem::SpawnDataBuffer
     StructuredBuffer m_RandomStateBuffer;
@@ -36,6 +40,8 @@ private:
     FluidEffectProperties m_OriginalEffectProperties;
     float m_ElapsedTime;
     UINT m_effectID;
+
+    std::uint32_t SortDepth = 0;
 
     bool m_initialised = false;
 };

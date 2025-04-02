@@ -14,6 +14,6 @@ FluidEmissionProperties* CreateFluidEmissionProperties()
     emitProps->FloorHeight = -0.7;
     emitProps->EmitSpeed = 1.0;
     emitProps->Gravity = XMFLOAT3(0, -5, 0);
-    emitProps->MaxParticles = 32768;
+    emitProps->MaxParticles = 131072;
     return emitProps;
 };

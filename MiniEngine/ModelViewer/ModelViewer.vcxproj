@@ -395,6 +395,7 @@
     <FxCompile Include="Shaders\FluidPS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
     </FxCompile>
+    <FxCompile Include="Shaders\FluidSortByLocationCS.hlsl" />
     <FxCompile Include="Shaders\FluidSortIndirectArgsCS.hlsl" />
     <FxCompile Include="Shaders\FluidSpawnCS.hlsl" />
     <FxCompile Include="Shaders\FluidTileCullingCS.hlsl" />

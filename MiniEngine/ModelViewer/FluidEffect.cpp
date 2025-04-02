@@ -31,6 +31,7 @@ namespace FluidEffectManager
     extern ComputePSO s_FluidSpawnCS;
     extern ComputePSO s_FluidUpdateCS;
     extern ComputePSO s_FluidAdvectionCS;
+    extern ComputePSO s_FluidSortByLocationCS;
     extern ComputePSO s_FluidDensityCS;
     extern ComputePSO s_FluidVelocityCS;
     extern ComputePSO s_FluidDispatchIndirectArgsCS;
@@ -46,24 +47,12 @@ FluidEffect::FluidEffect(FluidEffectProperties& effectProperties)
 
 inline static Color RandColor(Color c0, Color c1)
 {
-    // We might want to find min and max of each channel rather than assuming c0 <= c1
-    //return Color(
-    //    s_RNG.NextFloat(c0.R(), c1.R()),
-    //    s_RNG.NextFloat(c0.G(), c1.G()),
-    //    s_RNG.NextFloat(c0.B(), c1.B()),
-    //    s_RNG.NextFloat(c0.A(), c1.A())
-    //);
     return Color(1.f, 1.f, 1.f);
 }
 
 inline static XMFLOAT3 RandSpread(const XMFLOAT3& s)
 {
-    // We might want to find min and max of each channel rather than assuming c0 <= c1
-    //return XMFLOAT3(
-    //    s_RNG.NextFloat(-s.x, s.x),
-    //    s_RNG.NextFloat(-s.y, s.y),
-    //    s_RNG.NextFloat(-s.z, s.z)
-    //);
+
     return XMFLOAT3(0.f, 1.f, 0.f);
 
 }
@@ -105,6 +94,9 @@ void FluidEffect::LoadDeviceResources(ID3D12Device* device)
     m_StateBuffers[1].Create(L"ParticleSystem::Buffer1", m_EffectProperties.EmitProperties.MaxParticles, sizeof(FluidMotion));
     m_CurrentStateBuffer = 0;
 
+    m_LookupMap.Create(L"FluidSystemSpacialHashing::LookupMap", 1024, sizeof(std::uint32_t));
+    m_TempIndexArray.Create(L"FluidSystemSpacialHashing::TempIndexArray", m_EffectProperties.EmitProperties.MaxParticles, sizeof(std::uint32_t));
+
     //DispatchIndirect args buffer / number of thread groups
     __declspec(align(16)) UINT DispatchIndirectData[3] = { 0, 1, 1 };
     m_DispatchIndirectArgs.Create(L"ParticleSystem::DispatchIndirectArgs", 1, sizeof(D3D12_DISPATCH_ARGUMENTS), DispatchIndirectData);
@@ -138,6 +130,8 @@ void FluidEffect::Update(ComputeContext& CompContext, float timeDelta)
     }
 
     ComputeFluidAdvection(CompContext);
+    ComputeFluidLookupMap(CompContext);
+    //CompContext.SetConstants(0, timeDelta);
     ComputeFluidDensity(CompContext);
     ComputeFluidVelocity(CompContext);
 
@@ -174,19 +168,19 @@ void FluidEffect::SpawnFluid(ComputeContext& CompContext)
     CompContext.SetDynamicDescriptor(4, 0, m_StateBuffers[m_CurrentStateBuffer].GetCounterSRV(CompContext)); //Input: number of particles
     CompContext.SetDynamicDescriptor(3, 1, m_DispatchIndirectArgs.GetUAV()); //Output:  m_DispatchIndirectArgs = (number of particles,1,1)
     CompContext.Dispatch(1, 1, 1);
+
 }
 
 void FluidEffect::ComputeFluidAdvection(ComputeContext& CompContext)
 {
     CompContext.SetDynamicConstantBufferView(2, sizeof(FluidEmissionProperties), &m_EffectProperties.EmitProperties);
+    
 
     CompContext.TransitionResource(m_StateBuffers[m_CurrentStateBuffer], D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     CompContext.SetDynamicDescriptor(4, 0, m_RandomStateBuffer.GetSRV()); //g_ResetData
     CompContext.SetDynamicDescriptor(4, 1, m_StateBuffers[m_CurrentStateBuffer].GetSRV()); //g_InputBuffer. m_CurrentStateBuffer = double buffered particle motion data
 
     m_CurrentStateBuffer ^= 1; //Bitwise XOR swaps between 0 and 1
-
-    CompContext.ResetCounter(m_StateBuffers[m_CurrentStateBuffer]); //Resets the front buffer's counter buffer
 
     CompContext.SetPipelineState(s_FluidAdvectionCS); //Load in the shader pipeline
     CompContext.TransitionResource(m_StateBuffers[m_CurrentStateBuffer], D3D12_RESOURCE_STATE_UNORDERED_ACCESS); //Transition g_OutputBuffer as UAV (Input is an SRV)
@@ -194,10 +188,68 @@ void FluidEffect::ComputeFluidAdvection(ComputeContext& CompContext)
     CompContext.SetDynamicDescriptor(3, 2, m_StateBuffers[m_CurrentStateBuffer].GetUAV()); //g_OutputBuffer
     CompContext.DispatchIndirect(m_DispatchIndirectArgs, 0);
 
-    // Why need a barrier here so long as we are artificially clamping particle count.  This allows living
-    // particles to take precedence over new particles.  The current system always spawns a multiple of 64
-    // particles (To Be Fixed) until the total particle count reaches maximum.
     CompContext.InsertUAVBarrier(m_StateBuffers[m_CurrentStateBuffer]);
+}
+
+//int firstbithigh(uint32_t number) {    
+//    int counter = -1;
+//    while (number > 1) {
+//        counter++;
+//        number = number >> 1;
+//    }
+//    return counter;
+//}
+//
+//int countbits(uint32_t number) 
+//{
+//    int counter = 0;
+//    for (int i = 0; i < 32; ++i) {
+//        counter += 1 & (number >> i);
+//    }
+//    return counter;
+//}
+
+void FluidEffect::ComputeFluidLookupMap(ComputeContext& CompContext)
+{
+    CompContext.SetDynamicConstantBufferView(2, sizeof(FluidEmissionProperties), &m_EffectProperties.EmitProperties);
+    {
+    //This was an attempt to spread the sort over multiple frames
+    ////Calculate sort depth for this frame
+    //{
+    //    SortDepth = SortDepth >> 7;
+
+    //    if (SortDepth < 256) {
+    //        uint32_t ParticleCount = m_EffectProperties.EmitProperties.MaxParticles;
+    //        uint32_t NextPow2 = countbits(ParticleCount) <= 1 ? ParticleCount : (2u << firstbithigh(ParticleCount));
+    //        SortDepth = NextPow2;
+    //    }
+    //}
+
+
+    //CompContext.SetConstants(0, SortDepth);
+    }
+
+    CompContext.TransitionResource(m_StateBuffers[m_CurrentStateBuffer], D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    CompContext.SetDynamicDescriptor(4, 1, m_StateBuffers[m_CurrentStateBuffer].GetSRV()); //g_InputBuffer. m_CurrentStateBuffer = double buffered particle motion data
+
+    m_CurrentStateBuffer ^= 1; //Bitwise XOR swaps between 0 and 1
+
+    CompContext.ResetCounter(m_TempIndexArray);
+    
+
+    CompContext.SetPipelineState(s_FluidSortByLocationCS); //Load in the shader pipeline
+    CompContext.TransitionResource(m_StateBuffers[m_CurrentStateBuffer], D3D12_RESOURCE_STATE_UNORDERED_ACCESS); //Work directly on the active buffer
+    CompContext.TransitionResource(m_DispatchIndirectArgs, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+    CompContext.TransitionResource(m_LookupMap, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    CompContext.TransitionResource(m_TempIndexArray, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    CompContext.SetDynamicDescriptor(3, 1, m_LookupMap.GetUAV()); //g_SortKeys
+    CompContext.SetDynamicDescriptor(3, 2, m_StateBuffers[m_CurrentStateBuffer].GetUAV()); //g_OutputBuffer
+    CompContext.SetDynamicDescriptor(3, 3, m_TempIndexArray.GetUAV()); //g_OutputBuffer
+    CompContext.Dispatch(1,1, 1);
+
+    CompContext.InsertUAVBarrier(m_StateBuffers[m_CurrentStateBuffer]);
+    CompContext.InsertUAVBarrier(m_LookupMap);
+    CompContext.InsertUAVBarrier(m_TempIndexArray);
 }
 
 void FluidEffect::ComputeFluidDensity(ComputeContext& CompContext)
@@ -205,12 +257,12 @@ void FluidEffect::ComputeFluidDensity(ComputeContext& CompContext)
     CompContext.SetDynamicConstantBufferView(2, sizeof(FluidEmissionProperties), &m_EffectProperties.EmitProperties);
 
     CompContext.TransitionResource(m_StateBuffers[m_CurrentStateBuffer], D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    CompContext.TransitionResource(m_LookupMap, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     CompContext.SetDynamicDescriptor(4, 0, m_RandomStateBuffer.GetSRV()); //g_ResetData
     CompContext.SetDynamicDescriptor(4, 1, m_StateBuffers[m_CurrentStateBuffer].GetSRV()); //g_InputBuffer. m_CurrentStateBuffer = double buffered particle motion data
+    CompContext.SetDynamicDescriptor(4, 2, m_LookupMap.GetSRV()); //g_SortKeys
 
     m_CurrentStateBuffer ^= 1; //Bitwise XOR swaps between 0 and 1
-
-    CompContext.ResetCounter(m_StateBuffers[m_CurrentStateBuffer]); //Resets the front buffer's counter buffer
 
     CompContext.SetPipelineState(s_FluidDensityCS); //Load in the shader pipeline
     CompContext.TransitionResource(m_StateBuffers[m_CurrentStateBuffer], D3D12_RESOURCE_STATE_UNORDERED_ACCESS); //Transition g_OutputBuffer as UAV (Input is an SRV)
@@ -218,9 +270,6 @@ void FluidEffect::ComputeFluidDensity(ComputeContext& CompContext)
     CompContext.SetDynamicDescriptor(3, 2, m_StateBuffers[m_CurrentStateBuffer].GetUAV()); //g_OutputBuffer
     CompContext.DispatchIndirect(m_DispatchIndirectArgs, 0);
 
-    // Why need a barrier here so long as we are artificially clamping particle count.  This allows living
-    // particles to take precedence over new particles.  The current system always spawns a multiple of 64
-    // particles (To Be Fixed) until the total particle count reaches maximum.
     CompContext.InsertUAVBarrier(m_StateBuffers[m_CurrentStateBuffer]);
 }
 
@@ -229,12 +278,12 @@ void FluidEffect::ComputeFluidVelocity(ComputeContext& CompContext)
     CompContext.SetDynamicConstantBufferView(2, sizeof(FluidEmissionProperties), &m_EffectProperties.EmitProperties);
 
     CompContext.TransitionResource(m_StateBuffers[m_CurrentStateBuffer], D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    CompContext.TransitionResource(m_LookupMap, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     CompContext.SetDynamicDescriptor(4, 0, m_RandomStateBuffer.GetSRV()); //g_ResetData
     CompContext.SetDynamicDescriptor(4, 1, m_StateBuffers[m_CurrentStateBuffer].GetSRV()); //g_InputBuffer. m_CurrentStateBuffer = double buffered particle motion data
+    CompContext.SetDynamicDescriptor(4, 2, m_LookupMap.GetSRV()); //g_SortKeys
 
     m_CurrentStateBuffer ^= 1; //Bitwise XOR swaps between 0 and 1
-
-    CompContext.ResetCounter(m_StateBuffers[m_CurrentStateBuffer]); //Resets the front buffer's counter buffer
 
     CompContext.SetPipelineState(s_FluidVelocityCS); //Load in the shader pipeline
     CompContext.TransitionResource(m_StateBuffers[m_CurrentStateBuffer], D3D12_RESOURCE_STATE_UNORDERED_ACCESS); //Transition g_OutputBuffer as UAV (Input is an SRV)
@@ -242,8 +291,5 @@ void FluidEffect::ComputeFluidVelocity(ComputeContext& CompContext)
     CompContext.SetDynamicDescriptor(3, 2, m_StateBuffers[m_CurrentStateBuffer].GetUAV()); //g_OutputBuffer
     CompContext.DispatchIndirect(m_DispatchIndirectArgs, 0);
 
-    // Why need a barrier here so long as we are artificially clamping particle count.  This allows living
-    // particles to take precedence over new particles.  The current system always spawns a multiple of 64
-    // particles (To Be Fixed) until the total particle count reaches maximum.
     CompContext.InsertUAVBarrier(m_StateBuffers[m_CurrentStateBuffer]);
 }

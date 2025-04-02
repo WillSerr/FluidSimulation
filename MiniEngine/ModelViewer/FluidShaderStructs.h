@@ -50,6 +50,8 @@ struct FluidMotion
     float Age;
     float Rotation;
     std::uint32_t ResetDataIndex;
+    std::uint32_t LocationHash;
+    std::uint32_t SortKey;
 };
 
 struct FluidVertex

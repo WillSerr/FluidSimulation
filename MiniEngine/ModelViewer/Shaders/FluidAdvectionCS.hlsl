@@ -44,8 +44,8 @@ void main(uint3 DTid : SV_DispatchThreadID)
     
     //ParticleState.Velocity -= ParticleState.Velocity * 0.3 * StepSize; //'air' resistance
     
-    const float HalfBounds = 100;
-    const float BoundsHeight = 100;
+    //const float HalfBounds = 100;
+    //const float BoundsHeight = 100;
     const float DampingFactor = 0.5;
     const float futureStep = 1.f / 120.f; //Length to predict position into the future
     
@@ -70,20 +70,18 @@ void main(uint3 DTid : SV_DispatchThreadID)
     
     ParticleState.PredictedPosition = ParticleState.Position + (ParticleState.Velocity * futureStep);
     
+    ParticleState.LocationHash = BasicPositionHash(ParticleState.Position, SimCellSize);
+    ParticleState.SortKey = HashToLookupKey(ParticleState.LocationHash);
     
-    // The spawn dispatch might be simultaneously adding particles as well.  It's possible to overflow.
-    uint index = g_OutputBuffer.IncrementCounter();
-    if (index >= MaxParticles)
-        return;
-
-    g_OutputBuffer[index] = ParticleState;
+    
+    g_OutputBuffer[DTid.x] = ParticleState;
 
     //
     // Generate a sprite vertex
     //
 
     float Speed = length(ParticleState.Velocity);
-    float ColourVal = min(1, Speed / 40.f) / 0.6f;
+    float ColourVal = min(1, (Speed * Speed * Speed) / 1000.f) * 0.8f;
     
     ParticleVertex Sprite;
 
@@ -91,8 +89,10 @@ void main(uint3 DTid : SV_DispatchThreadID)
     Sprite.TextureID = TextureID;
 
     // Set size and color
-    Sprite.Size = 1.f;
-    Sprite.Color = float4(0.4f + ColourVal, 0.4f + ColourVal, 1.f, 1.f);
-
+    Sprite.Size = 0.4f;
+    Sprite.Color = float4(0.2f + ColourVal, 0.2f + ColourVal, 1.f, 1.f);
+    //float Colour = ParticleState.SortKey / 1024.f;
+    //Sprite.Color = float4(Colour, Colour, Colour, 1.f);
+    
     g_VertexBuffer[g_VertexBuffer.IncrementCounter()] = Sprite;
 }

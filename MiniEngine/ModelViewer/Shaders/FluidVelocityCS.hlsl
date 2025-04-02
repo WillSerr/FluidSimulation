@@ -8,6 +8,7 @@ cbuffer CB0 : register(b0)
 
 StructuredBuffer<ParticleSpawnData> g_ResetData : register(t0);
 StructuredBuffer<ParticleMotion> g_InputBuffer : register(t1);
+StructuredBuffer<uint> g_SortKeys : register(t2);
 RWStructuredBuffer<ParticleVertex> g_VertexBuffer : register(u0);
 RWStructuredBuffer<ParticleMotion> g_OutputBuffer : register(u2);
 
@@ -50,48 +51,106 @@ void main(uint3 DTid : SV_DispatchThreadID)
     ParticleMotion ParticleState = g_InputBuffer[DTid.x];
     ParticleSpawnData rd = g_ResetData[ParticleState.ResetDataIndex];        
     
-    const float influenceRadius = 5;
+    const float influenceRadius = InfluenceRadius;
     const float futureStep = 1.f / 120.f; //Length to predict position into the future
     
     float3 totalInfluenceForce = float3(0.f, 0.f, 0.f);
     
-    
-    for (int i = 0; i < MaxParticles; ++i)
+    for (int i = 0; i < 27; ++i)
     {
-        if (i == DTid.x)
+        
+        float3 neighbourPos = offsets3D[i] * SimCellSize;
+        uint neighbourHash = BasicPositionHash(ParticleState.Position + neighbourPos, SimCellSize);
+        uint neighbourKey = HashToLookupKey(neighbourHash);
+        int inputBufferIndex = g_SortKeys[neighbourKey];
+        
+        while (inputBufferIndex < MaxParticles)
         {
-            continue;
-        }
+            //Must increment index before skipping to prevent endless loop
+            ParticleMotion Other = g_InputBuffer[inputBufferIndex];
+            inputBufferIndex++;
             
-        float3 deltaPos = ParticleState.PredictedPosition - g_InputBuffer[i].PredictedPosition;
+            //Stop when exiting the bucket
+            if (Other.SortKey != neighbourKey)
+            {
+                break;
+            }
+            //Skip particles from non-neighbour cells in the bucket
+            if (Other.LocationHash != neighbourHash)
+            {
+                continue;
+            }
+            //Skip over self
+            if (inputBufferIndex-1 == DTid.x)
+            {
+                continue;
+            }
+
+            
+            float3 deltaPos = ParticleState.PredictedPosition - Other.PredictedPosition;
         
-        float deltaSqrDistance = dot(deltaPos, deltaPos);
+            float deltaSqrDistance = dot(deltaPos, deltaPos);
         
-        //Causes a marked performance increase despite warp branching
-        if (deltaSqrDistance > (influenceRadius * influenceRadius)) //Skip calculations if other is outside of influence radius
-            continue;
+            //Causes a marked performance increase despite warp branching
+            if (deltaSqrDistance > (influenceRadius * influenceRadius)) //Skip calculations if other is outside of influence radius
+                continue;
         
-        //Unstick 2 overlapping particles
-        if (deltaSqrDistance == 0)
-        {
-            totalInfluenceForce += float3(0.f, 0.1f, 0.f) * sign(DTid.x - i) * influenceRadius; //One up, one down
-            continue;
+            //Unstick 2 overlapping particles (only really possible when spawned overlapping)
+            if (deltaSqrDistance == 0)
+            {
+                totalInfluenceForce += float3(0.f, 0.1f, 0.f) * sign(DTid.x - i) * influenceRadius; //One up, one down
+                continue;
+            }
+        
+            float influenceFactor = calculateInfluence(ParticleState.PredictedPosition, Other.PredictedPosition, influenceRadius);
+        
+            float3 deltaDirection = normalize(deltaPos);
+        
+            float sharedPressure = calculateSharedPressure(ParticleState.Density, Other.Density);
+            
+            totalInfluenceForce += sharedPressure * deltaDirection * influenceFactor;
+            
+            
+            
         }
+    }
+    
+    //for (int i = 0; i < MaxParticles; ++i)
+    //{
+    //    if (i == DTid.x)
+    //    {
+    //        continue;
+    //    }
+            
+    //    float3 deltaPos = ParticleState.PredictedPosition - g_InputBuffer[i].PredictedPosition;
+        
+    //    float deltaSqrDistance = dot(deltaPos, deltaPos);
+        
+    ////Causes a marked performance increase despite warp branching
+    //    if (deltaSqrDistance > (influenceRadius * influenceRadius)) //Skip calculations if other is outside of influence radius
+    //        continue;
+        
+    ////Unstick 2 overlapping particles
+    //    if (deltaSqrDistance == 0)
+    //    {
+    //        totalInfluenceForce += float3(0.f, 0.1f, 0.f) * sign(DTid.x - i) * influenceRadius; //One up, one down
+    //        continue;
+    //    }
         
 
        
-        //Could cache the future positions to prevent wasting cycles re-calculating
-        float influenceFactor = calculateInfluence(ParticleState.Position + (ParticleState.Velocity * futureStep), g_InputBuffer[i].Position + (g_InputBuffer[i].Velocity * futureStep), influenceRadius);
+    ////Could cache the future positions to prevent wasting cycles re-calculating
+    //    float influenceFactor = calculateInfluence(ParticleState.Position + (ParticleState.Velocity * futureStep), g_InputBuffer[i].Position + (g_InputBuffer[i].Velocity * futureStep), influenceRadius);
         
-        float3 deltaDirection = normalize(deltaPos);        
+    //    float3 deltaDirection = normalize(deltaPos);
         
-        float sharedPressure = calculateSharedPressure(ParticleState.Density, g_InputBuffer[i].Density);
-        totalInfluenceForce += sharedPressure * deltaDirection * influenceFactor;// * 1.f / g_InputBuffer[i].Density; // / g_InputBuffer[i].Density; //Missing Pressure(g_InputBuffer[i].Position), mass / g_InputBuffer[i].Density
+    //    float sharedPressure = calculateSharedPressure(ParticleState.Density, g_InputBuffer[i].Density);
+    //    totalInfluenceForce += sharedPressure * deltaDirection * influenceFactor; // * 1.f / g_InputBuffer[i].Density; // / g_InputBuffer[i].Density; //Missing Pressure(g_InputBuffer[i].Position), mass / g_InputBuffer[i].Density
 
-    }
+    //}
     
     float3 RightVector = cross(normalize(float3(ParticleState.Position.x, 0.f, ParticleState.Position.z)), float3(0.f, -1.f, 0.f));
-    float SwirlForce = max(0, 50 - length(ParticleState.Position.xz)) / 10;
+    float SwirlForce = max(0, 100 - length(ParticleState.Position.xz)) / 50;
     
     //float3 UpVector = float3(0, 1.f, 0);
     //float heightFactor = max(0, 40 - ParticleState.Position.y) / 40;
@@ -101,11 +160,6 @@ void main(uint3 DTid : SV_DispatchThreadID)
     ParticleState.Velocity += (totalInfluenceForce + float3(0.f, -9.8f, 0.f) + (RightVector * SwirlForce)) * gElapsedTime;
     
     
-    // The spawn dispatch will be simultaneously adding particles as well.  It's possible to overflow.
-    uint index = g_OutputBuffer.IncrementCounter();
-    if (index >= MaxParticles)
-        return;
-
-    g_OutputBuffer[index] = ParticleState;
+    g_OutputBuffer[DTid.x] = ParticleState;
     
 }

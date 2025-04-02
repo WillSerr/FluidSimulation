@@ -21,6 +21,7 @@
 #include "CompiledShaders/FluidSpawnCS.h"
 #include "CompiledShaders/FluidUpdateCS.h"
 #include "CompiledShaders/FluidAdvectionCS.h"
+#include "CompiledShaders/FluidSortByLocationCS.h"
 #include "CompiledShaders/FluidDensityCS.h"
 #include "CompiledShaders/FluidVelocityCS.h"
 #include "CompiledShaders/FluidDispatchIndirectArgsCS.h"
@@ -82,6 +83,7 @@ namespace FluidEffectManager
     ComputePSO s_FluidSpawnCS(L"Fluids: Fluid Spawn CS");
     ComputePSO s_FluidUpdateCS(L"Fluids: Fluid Update CS");
     ComputePSO s_FluidAdvectionCS(L"Fluids: Fluid Advection CS");
+    ComputePSO s_FluidSortByLocationCS(L"Fluids: Fluid Sort By Location CS");;
     ComputePSO s_FluidDensityCS(L"Fluids: Fluid Density CS");
     ComputePSO s_FluidVelocityCS(L"Fluids: Fluid Velocity CS");
     ComputePSO s_FluidDispatchIndirectArgsCS(L"Fluids: Fluid Dispatch Indirect Args CS");
@@ -406,6 +408,7 @@ void FluidEffectManager::Initialize(uint32_t MaxDisplayWidth, uint32_t MaxDispla
     CreatePSO(s_FluidSpawnCS, g_pFluidSpawnCS);
     CreatePSO(s_FluidUpdateCS, g_pFluidUpdateCS);
     CreatePSO(s_FluidAdvectionCS, g_pFluidAdvectionCS);
+    CreatePSO(s_FluidSortByLocationCS, g_pFluidSortByLocationCS);
     CreatePSO(s_FluidDensityCS, g_pFluidDensityCS);
     CreatePSO(s_FluidVelocityCS, g_pFluidVelocityCS);
     CreatePSO(s_FluidDispatchIndirectArgsCS, g_pFluidDispatchIndirectArgsCS);
@@ -671,7 +674,7 @@ void FluidEffectManager::Render(CommandContext& Context, const Camera& Camera, C
     // the compositing could be deferred.
     WARN_ONCE_IF(EnableTiledRendering && !g_bTypedUAVLoadSupport_R11G11B10_FLOAT,
         "Unable to composite tiled particles without support for R11G11B10F UAV loads");
-    EnableTiledRendering = EnableTiledRendering && g_bTypedUAVLoadSupport_R11G11B10_FLOAT;
+    EnableTiledRendering = false;// EnableTiledRendering&& g_bTypedUAVLoadSupport_R11G11B10_FLOAT;
 
     if (EnableTiledRendering)
     {

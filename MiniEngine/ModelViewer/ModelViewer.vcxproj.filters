@@ -348,5 +348,8 @@
     <FxCompile Include="Shaders\FluidVelocityCS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\FluidSortByLocationCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>
